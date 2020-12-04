@@ -3,7 +3,7 @@ deep learning code template using pytorch 1.4.0
 
 This repository offer template code for training deep learning model using PyTorch.
 
-#####Directory Information
+##### Directory Information
 
 data: have custom dataset class and dataset
 
