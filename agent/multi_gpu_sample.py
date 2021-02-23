@@ -10,12 +10,12 @@ from torch.utils.data import DataLoader
 
 from tensorboardX import SummaryWriter
 
-from graph.model.sample_model import SampleModel as Model
-from graph.loss.sample_loss import SampleLoss as Loss
+from graph.model.model import Model
+from graph.loss.sample_loss import Loss
 from data.sample_dataset import SampleDataset
 
 from utils.metrics import AverageMeter
-from utils.train_utils import free, frozen, set_logger, count_model_prameters
+from utils.train_utils import free, set_logger, count_model_prameters
 
 
 cudnn.benchmark = True
@@ -38,19 +38,19 @@ class Sample(object):
                                      pin_memory=self.config.pin_memory, collate_fn=self.collate_function)
 
         # define models ( generator and discriminator)
-        self.generator = Model().cuda()
+        self.model = Model().cuda()
 
         # define loss
-        self.loss_generator = Loss().cuda()
+        self.loss = Loss().cuda()
 
         # define lr
-        self.lr_generator = self.config.learning_rate
+        self.lr = self.config.learning_rate
 
         # define optimizer
-        self.opt_generator = torch.optim.Adam(self.generator.parameters(), lr=self.lr_generator)
+        self.opt = torch.optim.Adam(self.model.parameters(), lr=self.lr, eps=1e-6)
 
         # define optimize scheduler
-        self.scheduler_generator = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt_generator, mode='min',
+        self.scheduler_generator = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min',
                                                                               factor=0.8, cooldown=6)
 
         # initialize train counter
@@ -66,19 +66,19 @@ class Sample(object):
 
         # parallel setting
         gpu_list = list(range(self.config.gpu_cnt))
-        self.generator = nn.DataParallel(self.generator, device_ids=gpu_list)
+        self.model = nn.DataParallel(self.model, device_ids=gpu_list)
 
         # Model Loading from the latest checkpoint if not found start from scratch.
         self.load_checkpoint(self.config.checkpoint_file)
 
         # Summary Writer
         self.summary_writer = SummaryWriter(log_dir=os.path.join(self.config.root_path, self.config.summary_dir),
-                                            comment='BarGen')
+                                            comment='LayoutNet')
         self.print_train_info()
 
     def print_train_info(self):
         print("seed: ", self.manual_seed)
-        print('Number of model parameters: {}'.format(count_model_prameters(self.generator)))
+        print('Number of model parameters: {}'.format(count_model_prameters(self.model)))
 
     def collate_function(self, samples):
         return samples
@@ -89,8 +89,8 @@ class Sample(object):
             print("Loading checkpoint '{}'".format(filename))
             checkpoint = torch.load(filename)
 
-            self.generator.load_state_dict(checkpoint['generator_state_dict'])
-            self.opt_generator.load_state_dict(checkpoint['generator_optimizer'])
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.opt.load_state_dict(checkpoint['optimizer'])
 
         except OSError as e:
             print("No checkpoint exists from '{}'. Skipping...".format(self.config.checkpoint_dir))
@@ -101,8 +101,8 @@ class Sample(object):
                                 'checkpoint_{}.pth.tar'.format(epoch))
 
         state = {
-            'generator_state_dict': self.generator.state_dict(),
-            'generator_optimizer': self.opt_generator.state_dict(),
+            'model_state_dict': self.model.state_dict(),
+            'optimizer': self.opt.state_dict(),
         }
 
         torch.save(state, tmp_name)
@@ -127,27 +127,32 @@ class Sample(object):
     def train_by_epoch(self):
         tqdm_batch = tqdm(self.dataloader, total=self.total_iter, desc="epoch-{}".format(self.epoch))
 
-        avg_generator_loss = AverageMeter()
-        for curr_it, (X, y) in enumerate(tqdm_batch):
+        avg_loss = AverageMeter()
+        for curr_it, data in enumerate(tqdm_batch):
             self.accumulate_iter += 1
 
-            self.generator.train()
-            free(self.generator)
+            self.model.train()
+            free(self.model)
 
-            X = X.cuda(async=self.config.async_loading)
+            img = data['img'].cuda(async=self.config.async_loading)
+            line = data['line'].cuda(async=self.config.async_loading)
+            box = data['box'].cuda(async=self.config.async_loading)
+            edge = data['edge'].cuda(async=self.config.async_loading)
+            corner = data['corner'].cuda(async=self.config.async_loading)
 
-            logits = self.generator(X)
+            out = self.model(torch.cat((img, line), dim=1))
 
-            loss = self.loss_disc(logits, y)
+            loss = self.loss(out, edge, corner, box)
             loss.backward()
-            self.opt_generator.step()
-            avg_generator_loss.update(loss)
+            self.opt.step()
+
+            avg_loss.update(loss)
 
         tqdm_batch.close()
 
-        self.scheduler_generator.step(avg_generator_loss.val)
+        self.scheduler_generator.step(avg_loss.val)
 
         with torch.no_grad():
-            self.generator.eval()
+            self.model.eval()
 
             # add evaluation code
