@@ -161,13 +161,13 @@ class Sample(object):
     def train(self):
         while self.epoch < self.config.epoch:
             for pt_order in range(3):
-                self.epoch = 0
                 for _ in range(self.pretraining_step_size):
                     self.epoch += 1
                     if pt_order < 2:
                         self.pre_train(pt_order)
                     else:
                         self.pre_train_reg()
+                self.epoch = 0
 
             self.train_by_epoch()
             self.save_checkpoint(self.config.checkpoint_file)
