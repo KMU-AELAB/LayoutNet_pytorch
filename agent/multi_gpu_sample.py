@@ -29,6 +29,7 @@ class Sample(object):
         self.config = config
         self.flag_gan = False
         self.train_count = 0
+        self.best_val_loss = 9999.
 
         self.pretraining_step_size = self.config.pretraining_step_size
         self.batch_size = self.config.batch_size
@@ -170,7 +171,6 @@ class Sample(object):
                 self.epoch = 0
 
             self.train_by_epoch()
-            self.save_checkpoint(self.config.checkpoint_file)
                 
     def pre_train(self, pre_train_order):
         tqdm_batch = tqdm(self.dataloader, total=self.total_iter, desc='epoch-{}'.format(self.epoch))
@@ -188,10 +188,9 @@ class Sample(object):
 
             out = self.model(torch.cat((img, line), dim=1))
 
-            if pre_train_order == 0:
-                loss = self.bce(out[0], edge)
-            else:
-                loss = self.bce(out[1], corner)
+            loss = self.bce(out[0], edge)
+            if pre_train_order == 1:
+                loss += self.bce(out[1], corner)
                 
             loss.backward()
             
@@ -300,3 +299,6 @@ class Sample(object):
 
             self.record_image(out, corner, edge, 'val')
             self.summary_writer.add_scalar('val/loss', val_loss.val, self.epoch)
+            if val_loss.val < self.best_val_loss:
+                self.best_val_loss = val_loss.val
+                self.save_checkpoint(self.config.checkpoint_file)
