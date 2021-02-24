@@ -24,7 +24,7 @@ class Edge(nn.Module):
             decoder_conv(64 * 2, 32),
         ])
 
-        self.conv = nn.Conv2d(32*2, 3, 3, 1)
+        self.conv = nn.Conv2d(32*2, 3, kernel_size=3, stride=1, padding=1)
         self.sigmoid = nn.Sigmoid()
 
         self.apply(weights_init)
