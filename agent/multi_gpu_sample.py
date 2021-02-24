@@ -13,7 +13,8 @@ from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 
 from graph.model.model import Model
-from graph.loss.sample_loss import Loss
+from graph.model.regressor import Regressor
+from graph.loss.loss import BCELoss, MSELoss
 from data.dataset import Dataset
 
 from utils.metrics import AverageMeter
@@ -45,23 +46,32 @@ class Sample(object):
 
         # define models
         self.model = Model().cuda()
+        self.reg = Regressor().cuda()
 
         # define loss
-        self.loss = Loss().cuda()
+        self.bce = BCELoss().cuda()
+        self.mse = MSELoss().cuda()
 
         # define lr
         self.lr = self.config.learning_rate
 
         # define optimizer
         self.opt = torch.optim.Adam(self.model.parameters(), lr=self.lr, eps=1e-6)
+        self.edge_opt = torch.optim.Adam(self.model.parameters(), lr=self.lr, eps=1e-6)
+        self.corner_opt = torch.optim.Adam(self.model.parameters(), lr=self.lr, eps=1e-6)
+        self.reg_opt = torch.optim.Adam(self.reg.parameters(), lr=self.lr, eps=1e-6)
 
         # define optimize scheduler
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min',
-                                                                              factor=0.8, cooldown=6)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min', factor=0.8, cooldown=6)
+        self.edge_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.reg_opt, mode='min',
+                                                                        factor=0.8, cooldown=6)
+        self.corner_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.reg_opt, mode='min',
+                                                                        factor=0.8, cooldown=6)
+        self.reg_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.reg_opt, mode='min',
+                                                                        factor=0.8, cooldown=6)
 
         # initialize train counter
         self.epoch = 0
-        self.accumulate_iter = 0
         self.total_iter = (len(self.dataset) + self.config.batch_size - 1) // self.config.batch_size
         self.val_iter = (len(self.val_set) + self.config.batch_size - 1) // self.config.batch_size
 
@@ -84,7 +94,7 @@ class Sample(object):
         self.print_train_info()
 
     def print_train_info(self):
-        print("seed: ", self.manual_seed)
+        print('seed: ', self.manual_seed)
         print('Number of model parameters: {}'.format(count_model_prameters(self.model)))
 
     def collate_function(self, samples):
@@ -101,15 +111,15 @@ class Sample(object):
     def load_checkpoint(self, file_name):
         filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, file_name)
         try:
-            print("Loading checkpoint '{}'".format(filename))
+            print('Loading checkpoint {}'.format(filename))
             checkpoint = torch.load(filename)
 
             self.model.load_state_dict(checkpoint['model_state_dict'])
-            self.opt.load_state_dict(checkpoint['optimizer'])
+            self.reg.load_state_dict(checkpoint['reg_state_dict'])
 
         except OSError as e:
-            print("No checkpoint exists from '{}'. Skipping...".format(self.config.checkpoint_dir))
-            print("**First time to train**")
+            print('No checkpoint exists from {}. Skipping...'.format(self.config.checkpoint_dir))
+            print('**First time to train**')
 
     def save_checkpoint(self, epoch):
         tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir,
@@ -117,7 +127,7 @@ class Sample(object):
 
         state = {
             'model_state_dict': self.model.state_dict(),
-            'optimizer': self.opt.state_dict(),
+            'reg_state_dict': self.reg.state_dict(),
         }
 
         torch.save(state, tmp_name)
@@ -146,25 +156,107 @@ class Sample(object):
             self.train()
 
         except KeyboardInterrupt:
-            print("You have entered CTRL+C.. Wait to finalize")
+            print('You have entered CTRL+C.. Wait to finalize')
 
     def train(self):
-        for _ in range(self.config.epoch):
-            self.epoch += 1
-            self.train_by_epoch()
+        while self.epoch < self.config.epoch:
+            for pt_order in range(3):
+                self.epoch = 0
+                for _ in range(self.pretraining_step_size):
+                    self.epoch += 1
+                    if pt_order < 2:
+                        self.pre_train(pt_order)
+                    else:
+                        self.pre_train_reg()
 
-            if self.epoch > self.pretraining_step_size:
-                self.save_checkpoint(self.config.checkpoint_file)
+            self.train_by_epoch()
+            self.save_checkpoint(self.config.checkpoint_file)
+                
+    def pre_train(self, pre_train_order):
+        tqdm_batch = tqdm(self.dataloader, total=self.total_iter, desc='epoch-{}'.format(self.epoch))
+
+        avg_loss = AverageMeter()
+        corner, edge, out = None, None, None
+        for curr_it, data in enumerate(tqdm_batch):
+            self.model.train()
+            free(self.model)
+
+            img = data['img'].float().cuda(async=self.config.async_loading)
+            line = data['line'].float().cuda(async=self.config.async_loading)
+            edge = data['edge'].float().cuda(async=self.config.async_loading)
+            corner = data['corner'].float().cuda(async=self.config.async_loading)
+
+            out = self.model(torch.cat((img, line), dim=1))
+
+            if pre_train_order == 0:
+                loss = self.bce(out[0], edge)
+            else:
+                loss = self.bce(out[1], corner)
+                
+            loss.backward()
+            
+            if pre_train_order == 0:
+                self.edge_opt.step()
+            else:
+                self.corner_opt.step()
+                
+            avg_loss.update(loss)
+
+        tqdm_batch.close()
+
+        if pre_train_order == 0:
+            self.summary_writer.add_image('edge/origin 1', edge[0], self.epoch)
+            self.summary_writer.add_image('edge/origin 2', edge[1], self.epoch)
+
+            self.summary_writer.add_image('edge/pre_train 1', out[0][0], self.epoch)
+            self.summary_writer.add_image('edge/pre_train 2', out[0][1], self.epoch)
+
+            self.summary_writer.add_scalar('edge/pt_loss', avg_loss.val, self.epoch)
+
+            self.edge_scheduler.step(avg_loss.val)
+        else:
+            self.summary_writer.add_image('corner/origin 1', corner[0], self.epoch)
+            self.summary_writer.add_image('corner/origin 2', corner[1], self.epoch)
+
+            self.summary_writer.add_image('corner/pre_train 1', out[1][0], self.epoch)
+            self.summary_writer.add_image('corner/pre_train 2', out[1][1], self.epoch)
+
+            self.summary_writer.add_scalar('corner/pt_loss', avg_loss.val, self.epoch)
+
+            self.corner_scheduler.step(avg_loss.val)
+
+    def pre_train_reg(self):
+        tqdm_batch = tqdm(self.dataloader, total=self.total_iter, desc='epoch-{}'.format(self.epoch))
+
+        avg_loss = AverageMeter()
+        for curr_it, data in enumerate(tqdm_batch):
+            self.model.train()
+            free(self.model)
+
+            box = data['box'].float().cuda(async=self.config.async_loading)
+            edge = data['edge'].float().cuda(async=self.config.async_loading)
+            corner = data['corner'].float().cuda(async=self.config.async_loading)
+
+            reg_out = self.reg(torch.cat((edge, corner), dim=1))
+
+            loss = self.mse(reg_out, box)
+            loss.backward()
+            self.reg_opt.step()
+
+            avg_loss.update(loss)
+
+        tqdm_batch.close()
+
+        self.summary_writer.add_scalar('reg/pt_loss', avg_loss.val, self.epoch)
+        self.reg_scheduler.step(avg_loss.val)
 
     def train_by_epoch(self):
-        tqdm_batch = tqdm(self.dataloader, total=self.total_iter, desc="epoch-{}".format(self.epoch))
+        tqdm_batch = tqdm(self.dataloader, total=self.total_iter, desc='epoch-{}'.format(self.epoch))
 
         avg_loss = AverageMeter()
         val_loss = AverageMeter()
         corner, edge, out = None, None, None
         for curr_it, data in enumerate(tqdm_batch):
-            self.accumulate_iter += 1
-
             self.model.train()
             free(self.model)
 
@@ -175,8 +267,9 @@ class Sample(object):
             corner = data['corner'].float().cuda(async=self.config.async_loading)
 
             out = self.model(torch.cat((img, line), dim=1))
+            reg_out = self.reg(torch.cat((out[0], out[1]), dim=1))
 
-            loss = self.loss(out, edge, corner, box)
+            loss = self.bce(out[0], edge) + self.bce(out[1], corner) + (self.mse(reg_out, box) * 0.01)
             loss.backward()
             self.opt.step()
 
@@ -185,31 +278,25 @@ class Sample(object):
         tqdm_batch.close()
 
         self.record_image(out, corner, edge)
-        self.summary_writer.add_scalar("train/loss", avg_loss.val, self.epoch)
+        self.summary_writer.add_scalar('train/loss', avg_loss.val, self.epoch)
 
         self.scheduler.step(avg_loss.val)
 
         with torch.no_grad():
-            tqdm_batch_val = tqdm(self.val_loader, total=self.val_iter, desc="epoch_val-{}".format(self.epoch))
+            tqdm_batch_val = tqdm(self.val_loader, total=self.val_iter, desc='epoch_val-{}'.format(self.epoch))
             self.model.eval()
             for curr_it, data in enumerate(tqdm_batch_val):
-                self.accumulate_iter += 1
-
-                self.model.train()
-                free(self.model)
-
                 img = data['img'].float().cuda(async=self.config.async_loading)
                 line = data['line'].float().cuda(async=self.config.async_loading)
-                box = data['box'].float().cuda(async=self.config.async_loading)
                 edge = data['edge'].float().cuda(async=self.config.async_loading)
                 corner = data['corner'].float().cuda(async=self.config.async_loading)
 
                 out = self.model(torch.cat((img, line), dim=1))
 
-                loss = self.loss(out, edge, corner, box)
+                loss = self.bce(out[0], edge) + self.bce(out[1], corner)
                 val_loss.update(loss)
 
             tqdm_batch_val.close()
 
             self.record_image(out, corner, edge, 'val')
-            self.summary_writer.add_scalar("val/loss", val_loss.val, self.epoch)
+            self.summary_writer.add_scalar('val/loss', val_loss.val, self.epoch)
