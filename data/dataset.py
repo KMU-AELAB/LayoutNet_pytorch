@@ -6,10 +6,11 @@ import torch
 from torch.utils.data import Dataset
 
 
-class SampleDataset(Dataset):
-    def __init__(self,config):
+class Dataset(Dataset):
+    def __init__(self,config, dir):
         self.root_dir = config.root_path
-        self.data_list = os.listdir(os.path.join(self.root_dir, config.data_path, 'train'))
+        self.dir = dir
+        self.data_list = os.listdir(os.path.join(self.root_dir, config.data_path, self.dir))
         self.config = config
 
     def __len__(self):
@@ -19,7 +20,7 @@ class SampleDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        data_path = os.path.join(self.root_dir, self.config.data_path, 'train', self.data_list[idx])
+        data_path = os.path.join(self.root_dir, self.config.data_path, self.dir, self.data_list[idx])
         _data = np.load(data_path)
 
         data = [_data['img'], _data['line'], _data['corner'], _data['edge'], _data['box']]

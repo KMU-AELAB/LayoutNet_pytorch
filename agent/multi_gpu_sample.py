@@ -14,7 +14,7 @@ from tensorboardX import SummaryWriter
 
 from graph.model.model import Model
 from graph.loss.sample_loss import Loss
-from data.sample_dataset import SampleDataset
+from data.dataset import Dataset
 
 from utils.metrics import AverageMeter
 from utils.train_utils import free, set_logger, count_model_prameters
@@ -35,11 +35,15 @@ class Sample(object):
         self.logger = set_logger('train_epoch.log')
 
         # define dataloader
-        self.dataset = SampleDataset(self.config)
+        self.dataset = Dataset(self.config, 'train')
         self.dataloader = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False, num_workers=3,
                                      pin_memory=self.config.pin_memory, collate_fn=self.collate_function)
 
-        # define models ( generator and discriminator)
+        self.val_set = Dataset(self.config, 'val')
+        self.val_loader = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False, num_workers=2,
+                                     pin_memory=self.config.pin_memory, collate_fn=self.collate_function)
+
+        # define models
         self.model = Model().cuda()
 
         # define loss
@@ -52,13 +56,14 @@ class Sample(object):
         self.opt = torch.optim.Adam(self.model.parameters(), lr=self.lr, eps=1e-6)
 
         # define optimize scheduler
-        self.scheduler_generator = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min',
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min',
                                                                               factor=0.8, cooldown=6)
 
         # initialize train counter
         self.epoch = 0
         self.accumulate_iter = 0
         self.total_iter = (len(self.dataset) + self.config.batch_size - 1) // self.config.batch_size
+        self.val_iter = (len(self.val_set) + self.config.batch_size - 1) // self.config.batch_size
 
         self.manual_seed = random.randint(10000, 99999)
 
@@ -119,6 +124,23 @@ class Sample(object):
         shutil.copyfile(tmp_name, os.path.join(self.config.root_path, self.config.checkpoint_dir,
                                                self.config.checkpoint_file))
 
+    def record_image(self, output, origin_corner, origin_edge, state='train'):
+        self.summary_writer.add_image(state + '/origin_corner 1', origin_corner[0], self.epoch)
+        self.summary_writer.add_image(state + '/origin_corner 2', origin_corner[1], self.epoch)
+        self.summary_writer.add_image(state + '/origin_corner 3', origin_corner[2], self.epoch)
+
+        self.summary_writer.add_image(state + '/origin_edge 1', origin_edge[0], self.epoch)
+        self.summary_writer.add_image(state + '/origin_edge 2', origin_edge[1], self.epoch)
+        self.summary_writer.add_image(state + '/origin_edge 3', origin_edge[2], self.epoch)
+
+        self.summary_writer.add_image(state + '/model_corner 1', output[1][0], self.epoch)
+        self.summary_writer.add_image(state + '/model_corner 2', output[1][1], self.epoch)
+        self.summary_writer.add_image(state + '/model_corner 3', output[1][2], self.epoch)
+
+        self.summary_writer.add_image(state + '/model_edge 1', output[0][0], self.epoch)
+        self.summary_writer.add_image(state + '/model_edge 2', output[0][1], self.epoch)
+        self.summary_writer.add_image(state + '/model_edge 3', output[0][2], self.epoch)
+
     def run(self):
         try:
             self.train()
@@ -136,8 +158,11 @@ class Sample(object):
 
     def train_by_epoch(self):
         tqdm_batch = tqdm(self.dataloader, total=self.total_iter, desc="epoch-{}".format(self.epoch))
+        tqdm_batch_val = tqdm(self.val_loader, total=self.val_iter, desc="epoch_val-{}".format(self.epoch))
 
         avg_loss = AverageMeter()
+        val_loss = AverageMeter()
+        corner, edge, out = None, None, None
         for curr_it, data in enumerate(tqdm_batch):
             self.accumulate_iter += 1
 
@@ -160,9 +185,31 @@ class Sample(object):
 
         tqdm_batch.close()
 
-        self.scheduler_generator.step(avg_loss.val)
+        self.record_image(out, corner, edge)
+        self.summary_writer.add_scalar("train/loss", avg_loss.val, self.epoch)
+
+        self.scheduler.step(avg_loss.val)
 
         with torch.no_grad():
             self.model.eval()
+            for curr_it, data in enumerate(tqdm_batch_val):
+                self.accumulate_iter += 1
 
-            # add evaluation code
+                self.model.train()
+                free(self.model)
+
+                img = data['img'].float().cuda(async=self.config.async_loading)
+                line = data['line'].float().cuda(async=self.config.async_loading)
+                box = data['box'].float().cuda(async=self.config.async_loading)
+                edge = data['edge'].float().cuda(async=self.config.async_loading)
+                corner = data['corner'].float().cuda(async=self.config.async_loading)
+
+                out = self.model(torch.cat((img, line), dim=1))
+
+                loss = self.loss(out, edge, corner, box)
+                val_loss.update(loss)
+
+            tqdm_batch_val.close()
+
+            self.record_image(out, corner, edge, 'val')
+            self.summary_writer.add_scalar("val/loss", val_loss.val, self.epoch)
