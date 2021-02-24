@@ -36,7 +36,7 @@ class Sample(object):
 
         # define dataloader
         self.dataset = SampleDataset(self.config)
-        self.dataloader = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False, num_workers=2,
+        self.dataloader = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False, num_workers=3,
                                      pin_memory=self.config.pin_memory, collate_fn=self.collate_function)
 
         # define models ( generator and discriminator)
@@ -85,12 +85,12 @@ class Sample(object):
     def collate_function(self, samples):
         data = dict()
 
-        data['img'] = np.array([sample['img'] for sample in samples])
-        data['line'] = np.array([sample['line'] for sample in samples])
-        data['corner'] = np.array([sample['corner'] for sample in samples])
-        data['position'] = np.array([sample['edge'] for sample in samples])
-        data['box'] = np.array([sample['box'] for sample in samples])
-
+        data['img'] = torch.from_numpy(np.array([sample['img'] for sample in samples]))
+        data['line'] = torch.from_numpy(np.array([sample['line'] for sample in samples]))
+        data['corner'] = torch.from_numpy(np.array([sample['corner'] for sample in samples]))
+        data['edge'] = torch.from_numpy(np.array([sample['edge'] for sample in samples]))
+        data['box'] = torch.from_numpy(np.array([sample['box'] for sample in samples]))
+        
         return data
 
     def load_checkpoint(self, file_name):
@@ -144,11 +144,11 @@ class Sample(object):
             self.model.train()
             free(self.model)
 
-            img = data['img'].cuda(async=self.config.async_loading)
-            line = data['line'].cuda(async=self.config.async_loading)
-            box = data['box'].cuda(async=self.config.async_loading)
-            edge = data['edge'].cuda(async=self.config.async_loading)
-            corner = data['corner'].cuda(async=self.config.async_loading)
+            img = data['img'].float().cuda(async=self.config.async_loading)
+            line = data['line'].float().cuda(async=self.config.async_loading)
+            box = data['box'].float().cuda(async=self.config.async_loading)
+            edge = data['edge'].float().cuda(async=self.config.async_loading)
+            corner = data['corner'].float().cuda(async=self.config.async_loading)
 
             out = self.model(torch.cat((img, line), dim=1))
 

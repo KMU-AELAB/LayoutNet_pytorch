@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 class SampleDataset(Dataset):
     def __init__(self,config):
         self.root_dir = config.root_path
-        self.data_list = os.listdir(os.path.join(self.root_dir, config.data_path))
+        self.data_list = os.listdir(os.path.join(self.root_dir, config.data_path, 'train'))
         self.config = config
 
     def __len__(self):
@@ -26,13 +26,13 @@ class SampleDataset(Dataset):
 
         # flipping
         if random.random() < 0.6:
-            for i in range(len(data)):
+            for i in range(len(data) - 1):
                 data[i] = np.flip(data[i], axis=2)
 
         # rolling
         if random.random() < 0.6:
             dx = np.random.randint(data[0].shape[2])
-            for i in range(len(data)):
+            for i in range(len(data) - 1):
                 data[i] = np.roll(data[i], dx, axis=2)
 
         # gamma augmentation
