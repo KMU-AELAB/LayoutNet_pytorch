@@ -40,7 +40,7 @@ class Sample(object):
                                      pin_memory=self.config.pin_memory, collate_fn=self.collate_function)
 
         self.val_set = Dataset(self.config, 'val')
-        self.val_loader = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False, num_workers=2,
+        self.val_loader = DataLoader(self.val_set, batch_size=self.batch_size, shuffle=False, num_workers=2,
                                      pin_memory=self.config.pin_memory, collate_fn=self.collate_function)
 
         # define models
