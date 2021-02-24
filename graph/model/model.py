@@ -28,3 +28,10 @@ class Model(nn.Module):
         reg_out = self.regressor(torch.cat((corner_out, edge_out), dim=1))
 
         return edge_out, corner_out, reg_out
+
+
+if __name__ == '__main__':
+    from torchsummary import summary
+
+    model = Model()
+    summary(model, (6, 512, 1024), batch_size=10)
