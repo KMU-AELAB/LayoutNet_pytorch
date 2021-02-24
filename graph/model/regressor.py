@@ -43,7 +43,7 @@ class Regressor(nn.Module):
 
         for conv in self.module_lst:
             x = conv(x)
-        x = torch.flatten(x)
+        x = x.view(-1, 512 * 4 * 8)
 
         x = self.relu(self.linear1(x))
         x = self.relu(self.linear2(x))
