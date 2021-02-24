@@ -59,7 +59,7 @@ class Corner(nn.Module):
             decoder_conv(64 * 3, 32),
         ])
 
-        self.conv = nn.Conv2d(32 * 3, 1, 3, 1)
+        self.conv = nn.Conv2d(32 * 3, 1, kernel_size=3, stride=1, padding=1)
         self.sigmoid = nn.Sigmoid()
 
         self.apply(weights_init)
