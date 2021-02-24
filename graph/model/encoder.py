@@ -15,7 +15,7 @@ class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
 
-        self.modules = nn.ModuleList([
+        self.module_lst = nn.ModuleList([
             encoder_conv(6, 32),
             encoder_conv(32, 64),
             encoder_conv(64, 128),
@@ -36,7 +36,7 @@ class Encoder(nn.Module):
         """
         out_list = []
 
-        for conv in self.modules:
+        for conv in self.module_lst:
             x = conv(x)
             out_list.append(x)
         return out_list

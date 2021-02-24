@@ -15,7 +15,7 @@ class Edge(nn.Module):
     def __init__(self):
         super(Edge, self).__init__()
 
-        self.modules = nn.ModuleList([
+        self.module_lst = nn.ModuleList([
             decoder_conv(2048, 1024),
             decoder_conv(1024 * 2, 512),
             decoder_conv(512 * 2, 256),
@@ -33,7 +33,7 @@ class Edge(nn.Module):
         _input = x[-1]
         out_list = [_input]
 
-        for idx, conv in enumerate(self.modules):
+        for idx, conv in enumerate(self.module_lst):
             _input = nn.functional.interpolate(_input, scale_factor=2, mode='nearest')
             _input = conv(_input)
             _input = torch.cat((x[-(idx + 2)], _input), dim=1)
@@ -50,7 +50,7 @@ class Corner(nn.Module):
     def __init__(self):
         super(Corner, self).__init__()
 
-        self.modules = nn.ModuleList([
+        self.module_lst = nn.ModuleList([
             decoder_conv(2048, 1024),
             decoder_conv(1024 * 3, 512),
             decoder_conv(512 * 3, 256),
@@ -67,7 +67,7 @@ class Corner(nn.Module):
     def forward(self, x):
         _input = x[0]
 
-        for idx, conv in enumerate(self.modules):
+        for idx, conv in enumerate(self.module_lst):
             _input = nn.functional.interpolate(_input, scale_factor=2, mode='nearest')
             _input = conv(_input)
             _input = torch.cat((x[(idx + 1)], _input), dim=1)
