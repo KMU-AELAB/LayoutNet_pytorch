@@ -158,7 +158,6 @@ class Sample(object):
 
     def train_by_epoch(self):
         tqdm_batch = tqdm(self.dataloader, total=self.total_iter, desc="epoch-{}".format(self.epoch))
-        tqdm_batch_val = tqdm(self.val_loader, total=self.val_iter, desc="epoch_val-{}".format(self.epoch))
 
         avg_loss = AverageMeter()
         val_loss = AverageMeter()
@@ -191,6 +190,7 @@ class Sample(object):
         self.scheduler.step(avg_loss.val)
 
         with torch.no_grad():
+            tqdm_batch_val = tqdm(self.val_loader, total=self.val_iter, desc="epoch_val-{}".format(self.epoch))
             self.model.eval()
             for curr_it, data in enumerate(tqdm_batch_val):
                 self.accumulate_iter += 1
