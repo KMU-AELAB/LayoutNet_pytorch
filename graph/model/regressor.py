@@ -16,7 +16,7 @@ class Regressor(nn.Module):
     def __init__(self):
         super(Regressor, self).__init__()
 
-        self.modules = nn.ModuleList([
+        self.module_lst = nn.ModuleList([
             encoder_conv(4, 8),
             encoder_conv(8, 16),
             encoder_conv(16, 32),
@@ -41,7 +41,7 @@ class Regressor(nn.Module):
         :return: 1 x 6
         """
 
-        for conv in self.modules:
+        for conv in self.module_lst:
             x = conv(x)
         x = torch.flatten(x)
 
