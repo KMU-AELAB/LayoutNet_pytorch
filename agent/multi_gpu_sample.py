@@ -3,6 +3,8 @@ import shutil
 import random
 from tqdm import tqdm
 
+import numpy as np
+
 import torch
 from torch import nn
 from torch.backends import cudnn
@@ -34,7 +36,7 @@ class Sample(object):
 
         # define dataloader
         self.dataset = SampleDataset(self.config)
-        self.dataloader = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False, num_workers=1,
+        self.dataloader = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False, num_workers=2,
                                      pin_memory=self.config.pin_memory, collate_fn=self.collate_function)
 
         # define models ( generator and discriminator)
@@ -81,7 +83,15 @@ class Sample(object):
         print('Number of model parameters: {}'.format(count_model_prameters(self.model)))
 
     def collate_function(self, samples):
-        return samples
+        data = dict()
+
+        data['img'] = np.array([sample['img'] for sample in samples])
+        data['line'] = np.array([sample['line'] for sample in samples])
+        data['corner'] = np.array([sample['corner'] for sample in samples])
+        data['position'] = np.array([sample['edge'] for sample in samples])
+        data['box'] = np.array([sample['box'] for sample in samples])
+
+        return data
 
     def load_checkpoint(self, file_name):
         filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, file_name)
