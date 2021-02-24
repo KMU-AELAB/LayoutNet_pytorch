@@ -6,7 +6,7 @@ from graph.weights_initializer import weights_init
 
 def decoder_conv(_in, _out):
     return nn.Sequential(
-        nn.Conv2d(_in, _out, 3, 1),
+        nn.Conv2d(_in, _out, kernel_size=3, stride=1, padding=1),
         nn.ReLU(inplace=True),
     )
 
