@@ -20,23 +20,24 @@ class SampleDataset(Dataset):
             idx = idx.tolist()
 
         data_path = os.path.join(self.root_dir, self.config.data_path, 'train', self.data_list[idx])
-        data = np.load(data_path)
+        _data = np.load(data_path)
+
+        data = [_data['img'], _data['line'], _data['corner'], _data['edge'], _data['box']]
 
         # flipping
         if random.random() < 0.6:
-            for key in data.keys():
-                data[key] = np.flip(data[key], axis=2)
+            for i in range(len(data)):
+                data[i] = np.flip(data[i], axis=2)
 
         # rolling
         if random.random() < 0.6:
-            dx = np.random.randint(data['img'].shape[2])
-            for key in data.keys():
-                data[key] = np.roll(data[key], dx, axis=2)
+            dx = np.random.randint(data[0].shape[2])
+            for i in range(len(data)):
+                data[i] = np.roll(data[i], dx, axis=2)
 
         # gamma augmentation
         if random.random() < 0.6:
             p = np.random.uniform(0.5, 2)
-            data['img'] = data['img'] ** p
+            data[0] = data[0] ** p
 
-        return {'img': data['img'], 'line': data['line'], 'box': data['box'],
-                'corner': data['corner'], 'edge': data['edge']}
+        return {'img': data[0], 'line': data[1], 'corner': data[2], 'edge': data[3], 'box': data[4]}
