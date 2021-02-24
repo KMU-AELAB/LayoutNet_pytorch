@@ -2,9 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from graph.model.encoder import Encoder
-from graph.model.decoder import Edge, Corner
-from graph.model.regressor import Regressor
+from . import Encoder, Edge, Corner, Regressor
 
 from graph.weights_initializer import weights_init
 
