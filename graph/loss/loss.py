@@ -7,7 +7,7 @@ class TotalLoss(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.bce = nn.BCELoss()
+        self.bce = nn.BCELoss(reduction='none')
         self.mse = nn.MSELoss()
 
     def forward(self, out, tg1, tg2, gt3):
@@ -18,7 +18,7 @@ class BCELoss(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.bce = nn.BCELoss()
+        self.bce = nn.BCELoss(reduction='none')
 
     def forward(self, out, tg):
         return self.bce(out, tg)
