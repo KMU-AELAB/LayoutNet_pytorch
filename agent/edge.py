@@ -202,5 +202,5 @@ class Edge(object):
 
             if val_loss.val < self.best_val_loss:
                 self.best_val_loss = val_loss.val
-                if self.epoch < self.pretraining_step_size:
+                if self.epoch > self.pretraining_step_size:
                     self.save_checkpoint()
