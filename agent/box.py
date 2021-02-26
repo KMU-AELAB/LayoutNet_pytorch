@@ -108,9 +108,9 @@ class Box(object):
             print('No checkpoint exists from {}. Skipping...'.format(self.config.checkpoint_dir))
             print('**First time to train**')
 
-    def save_checkpoint(self, epoch):
+    def save_checkpoint(self):
         tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir,
-                                'reg_checkpoint_{}.pth.tar'.format(epoch))
+                                'reg_checkpoint_{}.pth.tar'.format(self.epoch))
 
         state = {
             'reg_state_dict': self.reg.state_dict(),
@@ -157,3 +157,7 @@ class Box(object):
         self.summary_writer.add_scalar('reg/loss', avg_loss.val, self.epoch)
 
         self.scheduler.step(avg_loss.val)
+
+        if avg_loss.val < self.best_val_loss:
+            self.best_val_loss = avg_loss.val
+            self.save_checkpoint()
