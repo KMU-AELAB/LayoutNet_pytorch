@@ -78,6 +78,7 @@ class Total(object):
         # parallel setting
         gpu_list = list(range(self.config.gpu_cnt))
         self.model = nn.DataParallel(self.model, device_ids=gpu_list)
+        self.reg = nn.DataParallel(self.reg, device_ids=gpu_list)
 
         # Model Loading from the latest checkpoint if not found start from scratch.
         self.load_checkpoint(self.config.checkpoint_file)
@@ -90,6 +91,7 @@ class Total(object):
     def print_train_info(self):
         print('seed: ', self.manual_seed)
         print('Number of model parameters: {}'.format(count_model_prameters(self.model)))
+        print('Number of model parameters: {}'.format(count_model_prameters(self.reg)))
 
     def collate_function(self, samples):
         data = dict()
@@ -173,6 +175,7 @@ class Total(object):
         corner, edge, out = None, None, None
         for curr_it, data in enumerate(tqdm_batch):
             self.model.train()
+            self.reg.train()
 
             img = data['img'].float().cuda(async=self.config.async_loading)
             line = data['line'].float().cuda(async=self.config.async_loading)

@@ -56,8 +56,8 @@ class Edge(object):
 
         # define optimizer
         self.opt = torch.optim.Adam([{'params': self.model.encoder.parameters()},
-                                          {'params': self.model.edge.parameters()}],
-                                         lr=self.lr, eps=1e-6)
+                                     {'params': self.model.edge.parameters()}],
+                                    lr=self.lr, eps=1e-6)
 
         # define optimize scheduler
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min', factor=0.8, cooldown=6)
