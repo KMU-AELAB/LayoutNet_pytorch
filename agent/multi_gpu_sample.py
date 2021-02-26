@@ -185,7 +185,6 @@ class Sample(object):
         corner, edge, out = None, None, None
         for curr_it, data in enumerate(tqdm_batch):
             self.model.train()
-            free(self.model)
 
             img = data['img'].float().cuda(async=self.config.async_loading)
             line = data['line'].float().cuda(async=self.config.async_loading)
@@ -241,7 +240,6 @@ class Sample(object):
         avg_loss = AverageMeter()
         for curr_it, data in enumerate(tqdm_batch):
             self.model.train()
-            free(self.model)
 
             box = data['box'].float().cuda(async=self.config.async_loading)
             edge = data['edge'].float().cuda(async=self.config.async_loading)
@@ -268,7 +266,6 @@ class Sample(object):
         corner, edge, out = None, None, None
         for curr_it, data in enumerate(tqdm_batch):
             self.model.train()
-            free(self.model)
 
             img = data['img'].float().cuda(async=self.config.async_loading)
             line = data['line'].float().cuda(async=self.config.async_loading)
