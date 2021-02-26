@@ -9,15 +9,19 @@ from agent.total import Total
 def main():
     config = Config()
 
+    print('#### pre-train edge model ####')
     agent = Edge(config)
     agent.run()
 
+    print('#### pre-train edge/corner model ####')
     agent = Corner(config)
     agent.run()
 
+    print('#### pre-train regress model ####')
     agent = Box(config)
     agent.run()
 
+    print('#### train all model ####')
     agent = Total(config)
     agent.run()
 

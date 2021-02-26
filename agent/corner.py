@@ -98,7 +98,7 @@ class Corner(object):
         return data
 
     def load_checkpoint(self, file_name):
-        filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, file_name)
+        filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'corner_' + file_name)
         try:
             print('Loading checkpoint {}'.format(filename))
             checkpoint = torch.load(filename)
@@ -109,9 +109,9 @@ class Corner(object):
             print('No checkpoint exists from {}. Skipping...'.format(self.config.checkpoint_dir))
             print('**First time to train**')
 
-    def save_checkpoint(self, epoch):
+    def save_checkpoint(self):
         tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir,
-                                'checkpoint_{}.pth.tar'.format(epoch))
+                                'corner_checkpoint_{}.pth.tar'.format(self.epoch))
 
         state = {
             'model_state_dict': self.model.state_dict(),
@@ -119,7 +119,7 @@ class Corner(object):
 
         torch.save(state, tmp_name)
         shutil.copyfile(tmp_name, os.path.join(self.config.root_path, self.config.checkpoint_dir,
-                                               self.config.checkpoint_file))
+                                               ('corner_' + self.config.checkpoint_file)))
 
     def run(self):
         try:
@@ -181,7 +181,7 @@ class Corner(object):
         self.scheduler.step(avg_loss.val)
 
 
-    def train_by_epoch(self):
+    def validate_by_epoch(self):
         tqdm_batch_val = tqdm(self.val_loader, total=self.val_iter, desc='epoch_val-{}'.format(self.epoch))
 
         with torch.no_grad():
@@ -225,4 +225,4 @@ class Corner(object):
 
             if val_loss.val < self.best_val_loss:
                 self.best_val_loss = val_loss.val
-                self.save_checkpoint(self.config.checkpoint_file)
+                self.save_checkpoint()

@@ -115,9 +115,17 @@ class Total(object):
             print('No checkpoint exists from {}. Skipping...'.format(self.config.checkpoint_dir))
             print('**First time to train**')
 
-    def save_checkpoint(self, epoch):
+            filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'corner_' + file_name)
+            checkpoint = torch.load(filename)
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+
+            filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'reg_' + file_name)
+            checkpoint = torch.load(filename)
+            self.reg.load_state_dict(checkpoint['reg_state_dict'])
+
+    def save_checkpoint(self):
         tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir,
-                                'checkpoint_{}.pth.tar'.format(epoch))
+                                'checkpoint_{}.pth.tar'.format(self.epoch))
 
         state = {
             'model_state_dict': self.model.state_dict(),
@@ -221,4 +229,4 @@ class Total(object):
 
             if val_loss.val < self.best_val_loss:
                 self.best_val_loss = val_loss.val
-                self.save_checkpoint(self.config.checkpoint_file)
+                self.save_checkpoint()

@@ -97,7 +97,7 @@ class Box(object):
         return data
 
     def load_checkpoint(self, file_name):
-        filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, file_name)
+        filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'reg_' + file_name)
         try:
             print('Loading checkpoint {}'.format(filename))
             checkpoint = torch.load(filename)
@@ -110,7 +110,7 @@ class Box(object):
 
     def save_checkpoint(self, epoch):
         tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir,
-                                'checkpoint_{}.pth.tar'.format(epoch))
+                                'reg_checkpoint_{}.pth.tar'.format(epoch))
 
         state = {
             'reg_state_dict': self.reg.state_dict(),
@@ -118,7 +118,7 @@ class Box(object):
 
         torch.save(state, tmp_name)
         shutil.copyfile(tmp_name, os.path.join(self.config.root_path, self.config.checkpoint_dir,
-                                               self.config.checkpoint_file))
+                                               ('reg_' + self.config.checkpoint_file)))
 
     def run(self):
         try:

@@ -99,7 +99,7 @@ class Edge(object):
         return data
 
     def load_checkpoint(self, file_name):
-        filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, file_name)
+        filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'edge_' + file_name)
         try:
             print('Loading checkpoint {}'.format(filename))
             checkpoint = torch.load(filename)
@@ -110,9 +110,9 @@ class Edge(object):
             print('No checkpoint exists from {}. Skipping...'.format(self.config.checkpoint_dir))
             print('**First time to train**')
 
-    def save_checkpoint(self, epoch):
+    def save_checkpoint(self):
         tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir,
-                                'checkpoint_{}.pth.tar'.format(epoch))
+                                'edge_checkpoint_{}.pth.tar'.format(self.epoch))
 
         state = {
             'model_state_dict': self.model.state_dict(),
@@ -120,7 +120,7 @@ class Edge(object):
 
         torch.save(state, tmp_name)
         shutil.copyfile(tmp_name, os.path.join(self.config.root_path, self.config.checkpoint_dir,
-                                               self.config.checkpoint_file))
+                                               ('edge_' + self.config.checkpoint_file)))
 
     def run(self):
         try:
@@ -202,4 +202,4 @@ class Edge(object):
 
             if val_loss.val < self.best_val_loss:
                 self.best_val_loss = val_loss.val
-                self.save_checkpoint(self.config.checkpoint_file)
+                self.save_checkpoint()
