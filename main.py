@@ -1,12 +1,24 @@
 from config import Config
 
-from agent.multi_gpu_sample import Sample
+from agent.edge import Edge
+from agent.corner import Corner
+from agent.box import Box
+from agent.total import Total
 
 
 def main():
     config = Config()
 
-    agent = Sample(config)
+    agent = Edge(config)
+    agent.run()
+
+    agent = Corner(config)
+    agent.run()
+
+    agent = Box(config)
+    agent.run()
+
+    agent = Total(config)
     agent.run()
 
 
