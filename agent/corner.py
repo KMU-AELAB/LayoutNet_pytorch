@@ -109,6 +109,10 @@ class Corner(object):
             print('No checkpoint exists from {}. Skipping...'.format(self.config.checkpoint_dir))
             print('**First time to train**')
 
+            filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'edge_' + file_name)
+            checkpoint = torch.load(filename)
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+
     def save_checkpoint(self):
         tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir,
                                 'corner_checkpoint_{}.pth.tar'.format(self.epoch))
@@ -134,7 +138,7 @@ class Corner(object):
             self.train_by_epoch()
             self.validate_by_epoch()
                 
-    def train_by_epoch(self, pre_train_order):
+    def train_by_epoch(self):
         tqdm_batch = tqdm(self.dataloader, total=self.total_iter, desc='epoch-{}'.format(self.epoch))
 
         avg_loss = AverageMeter()
