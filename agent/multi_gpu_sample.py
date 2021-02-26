@@ -38,7 +38,7 @@ class Sample(object):
 
         # define dataloader
         self.dataset = Dataset(self.config, 'train')
-        self.dataloader = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False, num_workers=3,
+        self.dataloader = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False, num_workers=2,
                                      pin_memory=self.config.pin_memory, collate_fn=self.collate_function)
 
         self.val_set = Dataset(self.config, 'val')
@@ -57,9 +57,15 @@ class Sample(object):
         self.lr = self.config.learning_rate
 
         # define optimizer
-        self.opt = torch.optim.Adam(self.model.parameters(), lr=self.lr, eps=1e-6)
-        self.edge_opt = torch.optim.Adam(self.model.parameters(), lr=self.lr, eps=1e-6)
-        self.corner_opt = torch.optim.Adam(self.model.parameters(), lr=self.lr, eps=1e-6)
+        self.opt = torch.optim.Adam([{'params': self.model.parameters()},
+                                     {'params': self.reg.parameters()}],
+                                    lr=self.lr, eps=1e-6)
+        self.edge_opt = torch.optim.Adam([{'params': self.model.encoder.parameters()},
+                                          {'params': self.model.edge.parameters()}],
+                                         lr=self.lr, eps=1e-6)
+        self.corner_opt = torch.optim.Adam([{'params': self.model.encoder.parameters()},
+                                            {'params': self.model.corner.parameters()}],
+                                           lr=self.lr, eps=1e-6)
         self.reg_opt = torch.optim.Adam(self.reg.parameters(), lr=self.lr, eps=1e-6)
 
         # define optimize scheduler
