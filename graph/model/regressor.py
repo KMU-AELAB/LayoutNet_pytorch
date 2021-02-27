@@ -32,6 +32,7 @@ class Regressor(nn.Module):
         self.linear4 = nn.Linear(64, 6)
 
         self.relu = nn.ReLU(inplace=True)
+        self.lrelu = nn.LeakyReLU   (inplace=True)
 
         self.apply(weights_init)
 
@@ -47,7 +48,7 @@ class Regressor(nn.Module):
 
         x = self.relu(self.linear1(x))
         x = self.relu(self.linear2(x))
-        x = self.relu(self.linear3(x))
-        out = self.relu(self.linear4(x))
+        x = self.lrelu(self.linear3(x))
+        out = self.linear4(x)
 
         return out
