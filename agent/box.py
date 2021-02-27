@@ -181,7 +181,7 @@ class Box(object):
 
             tqdm_batch_val.close()
 
-            self.summary_writer.add_scalar('reg/loss', val_loss.val, self.epoch)
+            self.summary_writer.add_scalar('reg_val/loss', val_loss.val, self.epoch)
 
             if val_loss.val < self.best_val_loss:
                 self.best_val_loss = val_loss.val
