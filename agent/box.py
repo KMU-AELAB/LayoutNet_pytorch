@@ -18,7 +18,7 @@ from graph.loss.loss import BCELoss, MSELoss
 from data.dataset import Dataset
 
 from utils.metrics import AverageMeter
-from utils.train_utils import free, set_logger, count_model_prameters
+from utils.train_utils import free, set_logger, count_model_prameters, get_lr
 
 
 cudnn.benchmark = True
@@ -42,7 +42,7 @@ class Box(object):
                                      pin_memory=self.config.pin_memory, collate_fn=self.collate_function)
 
         self.val_set = Dataset(self.config, 'val')
-        self.val_loader = DataLoader(self.val_set, batch_size=self.batch_size, shuffle=False, num_workers=2,
+        self.val_loader = DataLoader(self.val_set, batch_size=self.batch_size, shuffle=False, num_workers=1,
                                      pin_memory=self.config.pin_memory, collate_fn=self.collate_function)
 
         # define models
@@ -58,7 +58,7 @@ class Box(object):
         self.opt = torch.optim.Adam(self.reg.parameters(), lr=self.lr, eps=1e-6)
 
         # define optimize scheduler
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min', factor=0.8, cooldown=6)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min', factor=0.8, cooldown=7)
 
         # initialize train counter
         self.epoch = 0
@@ -157,6 +157,8 @@ class Box(object):
         self.summary_writer.add_scalar('reg/loss', avg_loss.val, self.epoch)
 
         self.scheduler.step(avg_loss.val)
+
+        self.logger.warning('info - lr: {}, loss: {}'.format(get_lr(self.opt), avg_loss.val))
 
         if avg_loss.val < self.best_val_loss:
             self.best_val_loss = avg_loss.val
