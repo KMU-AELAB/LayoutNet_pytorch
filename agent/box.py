@@ -131,6 +131,7 @@ class Box(object):
         while self.epoch < self.config.epoch:
             self.epoch += 1
             self.train_by_epoch()
+            self.validate_by_epoch()
                 
     def train_by_epoch(self):
         tqdm_batch = tqdm(self.dataloader, total=self.total_iter, desc='epoch-{}'.format(self.epoch))
