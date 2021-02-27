@@ -160,7 +160,30 @@ class Box(object):
 
         self.logger.warning('info - lr: {}, loss: {}'.format(get_lr(self.opt), avg_loss.val))
 
-        if avg_loss.val < self.best_val_loss:
-            self.best_val_loss = avg_loss.val
-            if self.epoch > self.pretraining_step_size:
-                self.save_checkpoint()
+    def validate_by_epoch(self):
+        tqdm_batch_val = tqdm(self.val_loader, total=self.val_iter, desc='epoch_val-{}'.format(self.epoch))
+
+        with torch.no_grad():
+            self.reg.eval()
+            val_loss = AverageMeter()
+
+            for curr_it, data in enumerate(tqdm_batch_val):
+                edge = data['edge'].float().cuda(async=self.config.async_loading)
+                corner = data['corner'].float().cuda(async=self.config.async_loading)
+                box = data['box'].float().cuda(async=self.config.async_loading)
+
+                reg_out = self.reg(torch.cat((edge, corner), dim=1))
+
+                loss = self.mse(reg_out, box)
+                loss.backward()
+
+                val_loss.update(loss)
+
+            tqdm_batch_val.close()
+
+            self.summary_writer.add_scalar('reg/loss', val_loss.val, self.epoch)
+
+            if val_loss.val < self.best_val_loss:
+                self.best_val_loss = val_loss.val
+                if self.epoch > self.pretraining_step_size:
+                    self.save_checkpoint()
