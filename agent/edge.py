@@ -150,7 +150,7 @@ class Edge(object):
             out = self.model(torch.cat((img, line), dim=1))
 
             loss = self.bce(out[0], edge)
-            loss[edge >= 0.] *= 4
+            loss[edge > 0.] *= 4
             loss = loss.mean()
 
             self.opt.zero_grad()
@@ -188,7 +188,7 @@ class Edge(object):
                 out = self.model(torch.cat((img, line), dim=1))
 
                 loss = self.bce(out[0], edge)
-                loss[edge >= 0.] *= 4
+                loss[edge > 0.] *= 4
                 loss = loss.mean()
 
                 val_loss.update(loss)

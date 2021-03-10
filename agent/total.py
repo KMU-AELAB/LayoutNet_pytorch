@@ -187,11 +187,11 @@ class Total(object):
             reg_out = self.reg(torch.cat((out[0], out[1]), dim=1))
 
             loss = self.bce(out[0], edge)
-            loss[edge >= 0.] *= 4
+            loss[edge > 0.] *= 4
             loss = loss.mean()
 
             c_loss = self.bce(out[1], corner)
-            c_loss[corner >= 0.] *= 4
+            c_loss[corner > 0.] *= 4
             loss += c_loss.mean()
 
             self.opt.zero_grad()
@@ -226,11 +226,11 @@ class Total(object):
                 out = self.model(torch.cat((img, line), dim=1))
 
                 loss = self.bce(out[0], edge)
-                loss[edge >= 0.] *= 4
+                loss[edge > 0.] *= 4
                 loss = loss.mean()
 
                 c_loss = self.bce(out[1], corner)
-                c_loss[corner >= 0.] *= 4
+                c_loss[corner > 0.] *= 4
                 loss += c_loss.mean()
 
                 val_loss.update(loss)
