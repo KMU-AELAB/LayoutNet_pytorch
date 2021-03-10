@@ -153,6 +153,7 @@ class Edge(object):
             loss[edge >= 0.] *= 4
             loss = loss.mean()
 
+            self.opt.zero_grad()
             loss.backward()
             self.opt.step()
                 

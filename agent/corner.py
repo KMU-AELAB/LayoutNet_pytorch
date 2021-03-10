@@ -160,7 +160,8 @@ class Corner(object):
             c_loss = self.bce(out[1], corner)
             c_loss[corner >= 0.] *= 4
             loss += c_loss.mean()
-                
+
+            self.opt.zero_grad()
             loss.backward()
             self.opt.step()
                 

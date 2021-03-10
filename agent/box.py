@@ -147,8 +147,9 @@ class Box(object):
             reg_out = self.reg(torch.cat((edge, corner), dim=1))
 
             loss = self.mse(reg_out, box)
-            loss.backward()
 
+            self.opt.zero_grad()
+            loss.backward()
             self.opt.step()
                 
             avg_loss.update(loss)

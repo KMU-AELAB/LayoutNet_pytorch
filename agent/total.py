@@ -194,6 +194,7 @@ class Total(object):
             c_loss[corner >= 0.] *= 4
             loss += c_loss.mean()
 
+            self.opt.zero_grad()
             loss += self.mse(reg_out, box) * 0.01
             loss.backward()
             self.opt.step()
