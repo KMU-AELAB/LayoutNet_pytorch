@@ -109,16 +109,13 @@ class Box(object):
             print('**First time to train**')
 
     def save_checkpoint(self):
-        tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir,
-                                'reg_checkpoint_{}.pth.tar'.format(self.epoch))
+        tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'reg_checkpoint.pth.tar')
 
         state = {
             'reg_state_dict': self.reg.state_dict(),
         }
 
         torch.save(state, tmp_name)
-        shutil.copyfile(tmp_name, os.path.join(self.config.root_path, self.config.checkpoint_dir,
-                                               ('reg_' + self.config.checkpoint_file)))
 
     def run(self):
         try:

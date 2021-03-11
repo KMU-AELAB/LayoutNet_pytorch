@@ -111,16 +111,13 @@ class Edge(object):
             print('**First time to train**')
 
     def save_checkpoint(self):
-        tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir,
-                                'edge_checkpoint_{}.pth.tar'.format(self.epoch))
+        tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'edge_checkpoint.pth.tar')
 
         state = {
             'model_state_dict': self.model.state_dict(),
         }
 
         torch.save(state, tmp_name)
-        shutil.copyfile(tmp_name, os.path.join(self.config.root_path, self.config.checkpoint_dir,
-                                               ('edge_' + self.config.checkpoint_file)))
 
     def run(self):
         try:
@@ -150,7 +147,7 @@ class Edge(object):
             out = self.model(torch.cat((img, line), dim=1))
 
             loss = self.bce(out[0], edge)
-            loss[edge > 0.] *= 4
+            loss[edge > 0.] *= 5
             loss = loss.mean()
 
             self.opt.zero_grad()
@@ -188,7 +185,7 @@ class Edge(object):
                 out = self.model(torch.cat((img, line), dim=1))
 
                 loss = self.bce(out[0], edge)
-                loss[edge > 0.] *= 4
+                loss[edge > 0.] *= 5
                 loss = loss.mean()
 
                 val_loss.update(loss)
