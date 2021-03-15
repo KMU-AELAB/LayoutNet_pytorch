@@ -225,11 +225,11 @@ class Total(object):
                 out = self.model(torch.cat((img, line), dim=1))
 
                 loss = self.bce(out[0], edge)
-                loss[edge > 0.] *= 5
+                loss[edge == 0.] *= 0.2
                 loss = loss.mean()
 
                 c_loss = self.bce(out[1], corner)
-                c_loss[corner > 0.] *= 5
+                c_loss[corner == 0.] *= 0.2
                 loss += c_loss.mean()
 
                 val_loss.update(loss)
