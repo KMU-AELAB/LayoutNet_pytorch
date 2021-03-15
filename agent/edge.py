@@ -2,6 +2,7 @@ import os
 import shutil
 import random
 from tqdm import tqdm
+from itertools import chain
 
 import numpy as np
 
@@ -147,11 +148,13 @@ class Edge(object):
             out = self.model(torch.cat((img, line), dim=1))
 
             loss = self.bce(out[0], edge)
-            loss[edge > 0.] *= 5
+            loss[edge == 0.] *= 0.2
             loss = loss.mean()
 
             self.opt.zero_grad()
             loss.backward()
+            nn.utils.clip_grad_norm_(chain(self.model.encoder.parameters(), self.model.edge.parameters()),
+                                     3.0, norm_type='inf')
             self.opt.step()
                 
             avg_loss.update(loss)

@@ -2,6 +2,7 @@ import os
 import shutil
 import random
 from tqdm import tqdm
+from itertools import chain
 
 import numpy as np
 
@@ -183,16 +184,18 @@ class Total(object):
             reg_out = self.reg(torch.cat((out[0], out[1]), dim=1))
 
             loss = self.bce(out[0], edge)
-            loss[edge > 0.] *= 5
+            loss[edge == 0.] *= 0.2
             loss = loss.mean()
 
             c_loss = self.bce(out[1], corner)
-            c_loss[corner > 0.] *= 5
+            c_loss[corner == 0.] *= 0.2
             loss += c_loss.mean()
 
-            self.opt.zero_grad()
             loss += self.mse(reg_out, box) * 0.01
+
+            self.opt.zero_grad()
             loss.backward()
+            nn.utils.clip_grad_norm_(chain(self.model.parameters(), self.reg.parameters()), 3.0, norm_type='inf')
             self.opt.step()
 
             avg_loss.update(loss)
