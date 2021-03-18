@@ -13,7 +13,8 @@ from torch.utils.data import DataLoader
 
 from tensorboardX import SummaryWriter
 
-from graph.model.model import Encoder, Edge as EG_model
+from graph.model.encoder import Encoder
+from graph.model.decoder import Edge as EG_model
 from graph.model.regressor import Regressor
 from graph.loss.loss import BCELoss, MSELoss
 from data.dataset import Dataset
