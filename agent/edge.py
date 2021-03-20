@@ -13,14 +13,13 @@ from torch.utils.data import DataLoader
 
 from tensorboardX import SummaryWriter
 
-from graph.model.model import Model
-from graph.model.regressor import Regressor
-from graph.loss.loss import BCELoss, MSELoss
+from graph.model.encoder import Encoder
+from graph.model.decoder import Edge as EG_model
+from graph.loss.loss import BCELoss
 from data.dataset import Dataset
 
 from utils.metrics import AverageMeter
-from utils.train_utils import free, set_logger, count_model_prameters, get_lr
-
+from utils.train_utils import set_logger, count_model_prameters, get_lr
 
 cudnn.benchmark = True
 
@@ -47,7 +46,8 @@ class Edge(object):
                                      pin_memory=self.config.pin_memory, collate_fn=self.collate_function)
 
         # define models
-        self.model = Model().cuda()
+        self.encoder = Encoder().cuda()
+        self.edge = EG_model().cuda()
 
         # define loss
         self.bce = BCELoss().cuda()
@@ -56,12 +56,13 @@ class Edge(object):
         self.lr = self.config.learning_rate
 
         # define optimizer
-        self.opt = torch.optim.Adam([{'params': self.model.encoder.parameters()},
-                                     {'params': self.model.edge.parameters()}],
+        self.opt = torch.optim.Adam([{'params': self.encoder.parameters()},
+                                     {'params': self.edge.parameters()}],
                                     lr=self.lr, eps=1e-6)
 
         # define optimize scheduler
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min', factor=0.8, cooldown=7)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min', factor=0.8,
+                                                                    cooldown=16, min_lr=8e-5)
 
         # initialize train counter
         self.epoch = 0
@@ -76,7 +77,8 @@ class Edge(object):
 
         # parallel setting
         gpu_list = list(range(self.config.gpu_cnt))
-        self.model = nn.DataParallel(self.model, device_ids=gpu_list)
+        self.encoder = nn.DataParallel(self.encoder, device_ids=gpu_list)
+        self.edge = nn.DataParallel(self.edge, device_ids=gpu_list)
 
         # Model Loading from the latest checkpoint if not found start from scratch.
         self.load_checkpoint(self.config.checkpoint_file)
@@ -88,7 +90,7 @@ class Edge(object):
 
     def print_train_info(self):
         print('seed: ', self.manual_seed)
-        print('Number of model parameters: {}'.format(count_model_prameters(self.model)))
+        print('Number of model parameters: {}'.format(count_model_prameters(self.encoder)))
 
     def collate_function(self, samples):
         data = dict()
@@ -96,7 +98,7 @@ class Edge(object):
         data['img'] = torch.from_numpy(np.array([sample['img'] for sample in samples]))
         data['line'] = torch.from_numpy(np.array([sample['line'] for sample in samples]))
         data['edge'] = torch.from_numpy(np.array([sample['edge'] for sample in samples]))
-        
+
         return data
 
     def load_checkpoint(self, file_name):
@@ -105,7 +107,8 @@ class Edge(object):
             print('Loading checkpoint {}'.format(filename))
             checkpoint = torch.load(filename)
 
-            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.encoder.load_state_dict(checkpoint['encoder_state_dict'])
+            self.edge.load_state_dict(checkpoint['edge_state_dict'])
 
         except OSError as e:
             print('No checkpoint exists from {}. Skipping...'.format(self.config.checkpoint_dir))
@@ -115,7 +118,8 @@ class Edge(object):
         tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'edge_checkpoint.pth.tar')
 
         state = {
-            'model_state_dict': self.model.state_dict(),
+            'model_state_dict': self.encoder.state_dict(),
+            'edge_state_dict': self.edge.state_dict(),
         }
 
         torch.save(state, tmp_name)
@@ -132,31 +136,33 @@ class Edge(object):
             self.epoch += 1
             self.train_by_epoch()
             self.validate_by_epoch()
-                
+
     def train_by_epoch(self):
         tqdm_batch = tqdm(self.dataloader, total=self.total_iter, desc='epoch-{}'.format(self.epoch))
 
         avg_loss = AverageMeter()
         edge, out = None, None
         for curr_it, data in enumerate(tqdm_batch):
-            self.model.train()
+            self.encoder.train()
+            self.edge.train()
 
             img = data['img'].float().cuda(async=self.config.async_loading)
             line = data['line'].float().cuda(async=self.config.async_loading)
             edge = data['edge'].float().cuda(async=self.config.async_loading)
 
-            out = self.model(torch.cat((img, line), dim=1))
+            out_encoder = self.encoder(torch.cat((img, line), dim=1))
+            _, out = self.edge(out_encoder)
 
-            loss = self.bce(out[0], edge)
-            loss[edge == 0.] *= 0.2
+            loss = self.bce(out, edge)
+            loss[edge > 0.] *= 4
             loss = loss.mean()
 
             self.opt.zero_grad()
             loss.backward()
-            nn.utils.clip_grad_norm_(chain(self.model.encoder.parameters(), self.model.edge.parameters()),
+            nn.utils.clip_grad_norm_(chain(self.encoder.parameters(), self.edge.parameters()),
                                      3.0, norm_type='inf')
             self.opt.step()
-                
+
             avg_loss.update(loss)
 
         tqdm_batch.close()
@@ -164,8 +170,8 @@ class Edge(object):
         self.summary_writer.add_image('edge/origin 1', edge[0], self.epoch)
         self.summary_writer.add_image('edge/origin 2', edge[1], self.epoch)
 
-        self.summary_writer.add_image('edge/pre_train 1', out[0][0], self.epoch)
-        self.summary_writer.add_image('edge/pre_train 2', out[0][1], self.epoch)
+        self.summary_writer.add_image('edge/pre_train 1', out[0], self.epoch)
+        self.summary_writer.add_image('edge/pre_train 2', out[1], self.epoch)
 
         self.summary_writer.add_scalar('edge/loss', avg_loss.val, self.epoch)
 
@@ -176,7 +182,8 @@ class Edge(object):
     def validate_by_epoch(self):
         tqdm_batch_val = tqdm(self.val_loader, total=self.val_iter, desc='epoch_val-{}'.format(self.epoch))
         with torch.no_grad():
-            self.model.eval()
+            self.encoder.eval()
+            self.edge.eval()
             val_loss = AverageMeter()
             edge, out = None, None
 
@@ -185,10 +192,11 @@ class Edge(object):
                 line = data['line'].float().cuda(async=self.config.async_loading)
                 edge = data['edge'].float().cuda(async=self.config.async_loading)
 
-                out = self.model(torch.cat((img, line), dim=1))
+                out_encoder = self.encoder(torch.cat((img, line), dim=1))
+                _, out = self.edge(out_encoder)
 
-                loss = self.bce(out[0], edge)
-                loss[edge == 0.] *= 0.2
+                loss = self.bce(out, edge)
+                loss[edge > 0.] *= 4
                 loss = loss.mean()
 
                 val_loss.update(loss)
@@ -198,8 +206,8 @@ class Edge(object):
             self.summary_writer.add_image('edge_val/origin 1', edge[0], self.epoch)
             self.summary_writer.add_image('edge_val/origin 2', edge[1], self.epoch)
 
-            self.summary_writer.add_image('edge_val/pre_train 1', out[0][0], self.epoch)
-            self.summary_writer.add_image('edge_val/pre_train 2', out[0][1], self.epoch)
+            self.summary_writer.add_image('edge_val/pre_train 1', out[0], self.epoch)
+            self.summary_writer.add_image('edge_val/pre_train 2', out[1], self.epoch)
 
             self.summary_writer.add_scalar('edge_val/loss', val_loss.val, self.epoch)
 

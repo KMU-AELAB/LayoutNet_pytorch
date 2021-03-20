@@ -12,9 +12,8 @@ from torch.utils.data import DataLoader
 
 from tensorboardX import SummaryWriter
 
-from graph.model.model import Model
 from graph.model.regressor import Regressor
-from graph.loss.loss import BCELoss, MSELoss
+from graph.loss.loss import MSELoss
 from data.dataset import Dataset
 
 from utils.metrics import AverageMeter
@@ -58,7 +57,8 @@ class Box(object):
         self.opt = torch.optim.Adam(self.reg.parameters(), lr=self.lr, eps=1e-6)
 
         # define optimize scheduler
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min', factor=0.8, cooldown=7)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min', factor=0.8,
+                                                                    cooldown=16, min_lr=8e-5)
 
         # initialize train counter
         self.epoch = 0

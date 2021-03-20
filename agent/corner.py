@@ -14,13 +14,11 @@ from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 
 from graph.model.model import Model
-from graph.model.regressor import Regressor
-from graph.loss.loss import BCELoss, MSELoss
+from graph.loss.loss import BCELoss
 from data.dataset import Dataset
 
 from utils.metrics import AverageMeter
 from utils.train_utils import free, set_logger, count_model_prameters, get_lr
-
 
 cudnn.benchmark = True
 
@@ -59,7 +57,8 @@ class Corner(object):
         self.opt = torch.optim.Adam(self.model.parameters(), lr=self.lr, eps=1e-6)
 
         # define optimize scheduler
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min', factor=0.8, cooldown=7)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min', factor=0.8, cooldown=16,
+                                                                    min_lr=8e-5)
 
         # initialize train counter
         self.epoch = 0
@@ -95,7 +94,7 @@ class Corner(object):
         data['line'] = torch.from_numpy(np.array([sample['line'] for sample in samples]))
         data['corner'] = torch.from_numpy(np.array([sample['corner'] for sample in samples]))
         data['edge'] = torch.from_numpy(np.array([sample['edge'] for sample in samples]))
-        
+
         return data
 
     def load_checkpoint(self, file_name):
@@ -112,7 +111,8 @@ class Corner(object):
 
             filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'edge_' + file_name)
             checkpoint = torch.load(filename)
-            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.model.encoder.load_state_dict(checkpoint['encoder_state_dict'])
+            self.model.edge.load_state_dict(checkpoint['edge_state_dict'])
 
     def save_checkpoint(self):
         tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'corner_checkpoint.pth.tar')
@@ -135,7 +135,7 @@ class Corner(object):
             self.epoch += 1
             self.train_by_epoch()
             self.validate_by_epoch()
-                
+
     def train_by_epoch(self):
         tqdm_batch = tqdm(self.dataloader, total=self.total_iter, desc='epoch-{}'.format(self.epoch))
 
@@ -163,7 +163,7 @@ class Corner(object):
             loss.backward()
             nn.utils.clip_grad_norm_(self.model.parameters(), 3.0, norm_type='inf')
             self.opt.step()
-                
+
             avg_loss.update(loss)
 
         tqdm_batch.close()
@@ -185,7 +185,6 @@ class Corner(object):
         self.scheduler.step(avg_loss.val)
 
         self.logger.warning('info - lr: {}, loss: {}'.format(get_lr(self.opt), avg_loss.val))
-
 
     def validate_by_epoch(self):
         tqdm_batch_val = tqdm(self.val_loader, total=self.val_iter, desc='epoch_val-{}'.format(self.epoch))
