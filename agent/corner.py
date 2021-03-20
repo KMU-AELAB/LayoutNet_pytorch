@@ -175,6 +175,8 @@ class Corner(object):
             c_loss[corner > 0.] *= 4
             loss += c_loss.mean()
 
+            out = (edge_out, corner_out)
+
             self.opt.zero_grad()
             loss.backward()
             nn.utils.clip_grad_norm_(chain(self.encoder.parameters(), self.edge.parameters(), self.corner.parameters()),
@@ -230,6 +232,8 @@ class Corner(object):
                 c_loss = self.bce(corner_out, corner)
                 c_loss[corner > 0.] *= 4
                 loss += c_loss.mean()
+
+                out = (edge_out, corner_out)
 
                 val_loss.update(loss)
 
