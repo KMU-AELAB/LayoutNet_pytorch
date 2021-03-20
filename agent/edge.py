@@ -118,7 +118,7 @@ class Edge(object):
         tmp_name = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'edge_checkpoint.pth.tar')
 
         state = {
-            'model_state_dict': self.encoder.state_dict(),
+            'encoder_state_dict': self.encoder.state_dict(),
             'edge_state_dict': self.edge.state_dict(),
         }
 
