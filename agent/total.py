@@ -13,7 +13,8 @@ from torch.utils.data import DataLoader
 
 from tensorboardX import SummaryWriter
 
-from graph.model.model import Model
+from graph.model.encoder import Encoder
+from graph.model.decoder import Edge, Corner
 from graph.model.regressor import Regressor
 from graph.loss.loss import BCELoss, MSELoss
 from data.dataset import Dataset
@@ -47,7 +48,9 @@ class Total(object):
                                      pin_memory=self.config.pin_memory, collate_fn=self.collate_function)
 
         # define models
-        self.model = Model().cuda()
+        self.encoder = Encoder().cuda()
+        self.edge = Edge().cuda()
+        self.corner = Corner().cuda()
         self.reg = Regressor().cuda()
 
         # define loss
@@ -58,12 +61,15 @@ class Total(object):
         self.lr = self.config.learning_rate
 
         # define optimizer
-        self.opt = torch.optim.Adam([{'params': self.model.parameters()},
+        self.opt = torch.optim.Adam([{'params': self.encoder.parameters()},
+                                     {'params': self.edge.parameters()},
+                                     {'params': self.corner.parameters()},
                                      {'params': self.reg.parameters()}],
                                     lr=self.lr, eps=1e-6)
 
         # define optimize scheduler
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min', factor=0.8, cooldown=7)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min', factor=0.8,
+                                                                    cooldown=16, min_lr=8e-5)
 
         # initialize train counter
         self.epoch = 0
@@ -78,7 +84,9 @@ class Total(object):
 
         # parallel setting
         gpu_list = list(range(self.config.gpu_cnt))
-        self.model = nn.DataParallel(self.model, device_ids=gpu_list)
+        self.encoder = nn.DataParallel(self.encoder, device_ids=gpu_list)
+        self.edge = nn.DataParallel(self.edge, device_ids=gpu_list)
+        self.corner = nn.DataParallel(self.corner, device_ids=gpu_list)
         self.reg = nn.DataParallel(self.reg, device_ids=gpu_list)
 
         # Model Loading from the latest checkpoint if not found start from scratch.
@@ -91,7 +99,7 @@ class Total(object):
 
     def print_train_info(self):
         print('seed: ', self.manual_seed)
-        print('Number of model parameters: {}'.format(count_model_prameters(self.model)))
+        print('Number of model parameters: {}'.format(count_model_prameters(self.encoder)))
         print('Number of model parameters: {}'.format(count_model_prameters(self.reg)))
 
     def collate_function(self, samples):
@@ -111,7 +119,9 @@ class Total(object):
             print('Loading checkpoint {}'.format(filename))
             checkpoint = torch.load(filename)
 
-            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.encoder.load_state_dict(checkpoint['encoder_state_dict'])
+            self.edge.load_state_dict(checkpoint['edge_state_dict'])
+            self.corner.load_state_dict(checkpoint['corner_state_dict'])
             self.reg.load_state_dict(checkpoint['reg_state_dict'])
 
         except OSError as e:
@@ -120,7 +130,9 @@ class Total(object):
 
             filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'corner_' + file_name)
             checkpoint = torch.load(filename)
-            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.encoder.load_state_dict(checkpoint['encoder_state_dict'])
+            self.edge.load_state_dict(checkpoint['edge_state_dict'])
+            self.corner.load_state_dict(checkpoint['corner_state_dict'])
 
             filename = os.path.join(self.config.root_path, self.config.checkpoint_dir, 'reg_' + file_name)
             checkpoint = torch.load(filename)
@@ -131,7 +143,9 @@ class Total(object):
                                 'checkpoint_{}.pth.tar'.format(self.epoch))
 
         state = {
-            'model_state_dict': self.model.state_dict(),
+            'encoder_state_dict': self.encoder.state_dict(),
+            'edge_state_dict': self.edge.state_dict(),
+            'corner_state_dict': self.corner.state_dict(),
             'reg_state_dict': self.reg.state_dict(),
         }
 
@@ -171,7 +185,9 @@ class Total(object):
         avg_loss = AverageMeter()
         corner, edge, out = None, None, None
         for curr_it, data in enumerate(tqdm_batch):
-            self.model.train()
+            self.encoder.train()
+            self.edge.train()
+            self.corner.train()
             self.reg.train()
 
             img = data['img'].float().cuda(async=self.config.async_loading)
@@ -180,22 +196,28 @@ class Total(object):
             edge = data['edge'].float().cuda(async=self.config.async_loading)
             corner = data['corner'].float().cuda(async=self.config.async_loading)
 
-            out = self.model(torch.cat((img, line), dim=1))
-            reg_out = self.reg(torch.cat((out[0], out[1]), dim=1))
+            encoder_out_list = self.encoder(torch.cat((img, line), dim=1))
+            edge_out_list, edge_out = self.edge(encoder_out_list)
+            corner_out = self.corner(edge_out_list)
 
-            loss = self.bce(out[0], edge)
-            loss[edge == 0.] *= 5
+            reg_out = self.reg(torch.cat((edge_out, corner_out), dim=1))
+
+            loss = self.bce(edge_out, edge)
+            loss[edge > 0.] *= 4
             loss = loss.mean()
 
-            c_loss = self.bce(out[1], corner)
-            c_loss[corner > 0.] *= 5
+            c_loss = self.bce(corner_out, corner)
+            c_loss[corner > 0.] *= 4
             loss += c_loss.mean()
 
             loss += self.mse(reg_out, box) * 0.01
+            out = (edge_out, corner_out)
 
             self.opt.zero_grad()
             loss.backward()
-            nn.utils.clip_grad_norm_(chain(self.model.parameters(), self.reg.parameters()), 3.0, norm_type='inf')
+            nn.utils.clip_grad_norm_(chain(self.encoder.parameters(), self.edge.parameters(),
+                                           self.corner.parameters(), self.reg.parameters()),
+                                     3.0, norm_type='inf')
             self.opt.step()
 
             avg_loss.update(loss)
@@ -215,22 +237,29 @@ class Total(object):
         tqdm_batch_val = tqdm(self.val_loader, total=self.val_iter, desc='epoch_val-{}'.format(self.epoch))
 
         with torch.no_grad():
-            self.model.eval()
+            self.encoder.eval()
+            self.edge.eval()
+            self.corner.eval()
+
             for curr_it, data in enumerate(tqdm_batch_val):
                 img = data['img'].float().cuda(async=self.config.async_loading)
                 line = data['line'].float().cuda(async=self.config.async_loading)
                 edge = data['edge'].float().cuda(async=self.config.async_loading)
                 corner = data['corner'].float().cuda(async=self.config.async_loading)
 
-                out = self.model(torch.cat((img, line), dim=1))
+                encoder_out_list = self.encoder(torch.cat((img, line), dim=1))
+                edge_out_list, edge_out = self.edge(encoder_out_list)
+                corner_out = self.corner(edge_out_list)
 
-                loss = self.bce(out[0], edge)
-                loss[edge > 0.] *= 5
+                loss = self.bce(edge_out, edge)
+                loss[edge > 0.] *= 4
                 loss = loss.mean()
 
-                c_loss = self.bce(out[1], corner)
-                c_loss[corner > 0.] *= 5
+                c_loss = self.bce(corner_out, corner)
+                c_loss[corner > 0.] *= 4
                 loss += c_loss.mean()
+
+                out = (edge_out, corner_out)
 
                 val_loss.update(loss)
 
