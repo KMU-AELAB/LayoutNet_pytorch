@@ -177,7 +177,7 @@ class Corner(object):
 
             self.opt.zero_grad()
             loss.backward()
-            nn.utils.clip_grad_norm_((self.encoder.parameters(), self.edge.parameters(), self.corner.parameters()),
+            nn.utils.clip_grad_norm_(chain(self.encoder.parameters(), self.edge.parameters(), self.corner.parameters()),
                                      3.0, norm_type='inf')
             self.opt.step()
 
